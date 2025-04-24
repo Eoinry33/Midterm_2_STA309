@@ -1,0 +1,389 @@
+---
+title: "Artist_Sentiment_Wordcloud_Analysis"
+author: "Eoin Young"
+date: "2025-04-24"
+output: html_document
+---
+
+```{r, warning=FALSE}
+# Load required packages
+library(tidyverse)
+library(spotifyr)
+library(wordcloud)
+library(ggplot2)
+library(tidytext)
+library(RColorBrewer)
+library(ggwordcloud)
+library(gridExtra)
+
+# Set Spotify credentials
+Sys.setenv(SPOTIFY_CLIENT_ID = 'e2827dee2194433e84d413010e9a3920')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = '6d3aa2574dec49acaf80c7d916b6f195')
+access_token <- get_spotify_access_token()
+
+# Define Clairo's album IDs
+album_ids <- c(
+  Charm = "1KNUCVXgIxKUGiuEB8eG0i",
+  Immunity = "4kkVGtCqE2NiAKosri9Rnd",
+  Sling = "32ium7Cxb1Xwp2MLzH2459"
+)
+
+# Tracklist (you already had this)
+tracklist <- tribble(~album, ~track,
+  # Charm Album
+  "Charm","Add Up My Love", 
+  "Charm","Sexy to Someone", 
+  "Charm","Nomad", 
+  "Charm","Second Nature",
+  "Charm","Terrapin", 
+  "Charm","Juna", 
+  "Charm","Echo", 
+  "Charm","Slow Dance", 
+  "Charm","Thank You",
+  "Charm","Glory of the Snow", 
+  "Charm","Pier 4",
+
+  # Immunity Album
+  "Immunity","Alewife", 
+  "Immunity","Impossible",
+  "Immunity","Closer to You",
+  "Immunity","North", 
+  "Immunity","Bags",
+  "Immunity","Softly", 
+  "Immunity","Sofia", 
+  "Immunity","White Flag", 
+  "Immunity","Feel Something",
+  "Immunity","Pretty Girl", 
+  "Immunity","I Wouldn’t Ask You",
+
+  # Sling Album
+  "Sling","Bambi", 
+  "Sling","Amoeba", 
+  "Sling","Partridge",
+  "Sling","Zinnias", 
+  "Sling","Blouse", 
+  "Sling","Wade",
+  "Sling","Harbor",
+  "Sling","Just For Today",
+  "Sling","Reaper",
+  "Sling","Little Changes",
+  "Sling","Management"
+)
+
+# Updated function to add album name
+get_album_track_info <- function(album_id, album_name) {
+  tracks <- get_album_tracks(album_id)
+  tracks$album_name <- album_name
+  return(tracks)
+}
+
+# Combine all track info
+all_tracks_info <- bind_rows(
+  get_album_track_info(album_ids["Charm"], "Charm"),
+  get_album_track_info(album_ids["Immunity"], "Immunity"),
+  get_album_track_info(album_ids["Sling"], "Sling")
+)
+
+# Get track popularity and join
+track_ids <- all_tracks_info$id
+track_popularity <- get_tracks(track_ids) %>%
+  select(id, popularity)
+
+spotify_data <- left_join(all_tracks_info, track_popularity, by = "id")
+
+# Optional: create directory to save data
+dir.create("spotify_data", showWarnings = FALSE)
+
+
+```
+
+
+
+```{r}
+# Create the wordclouds for each album
+
+
+# First we start with Charm (As it's the most recent album)
+charm_song_files <- c("/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Nomad.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Sexy_to_Someone.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Second_Nature.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Slow_Dance.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Thank_You.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Terrapin.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Juna.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Add_Up_My_Love.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Echo.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Glory_of_the_Snow.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Charm/Pier_4.txt")
+
+charm_text <- list()
+for (file in charm_song_files) {charm_text[[file]] <- paste(readLines(file, warn = FALSE), 
+                                                       collapse = " ")}
+
+# Create a data frame for the lyrics
+charm_df <- data.frame(
+  song = names(charm_text),
+  lyrics = unlist(charm_text),
+  stringsAsFactors = FALSE)
+
+# Put them into individual words
+charm_words <- charm_df %>%
+  unnest_tokens(word, lyrics)
+
+# Remove stop words
+data("stop_words")
+charm_words_clean <- charm_words %>%
+  anti_join(stop_words)
+
+# Make the sentiment
+bing_sentiments <- get_sentiments("bing")
+charm_sentiment <- suppressWarnings(charm_words_clean %>%
+  left_join(bing_sentiments, by = join_by("word")) %>%
+  filter(!is.na(sentiment)))
+
+# Count the number of pos/neg words
+charm_sentiment_counts <- charm_sentiment %>%
+  group_by(sentiment) %>%
+  count(word, sort = TRUE) %>%
+  ungroup()
+
+# Create the wordcloud plot
+charm_wordcloud_plot <- ggplot(charm_sentiment_counts, aes(label = word, size = n, color = sentiment)) +
+  geom_text_wordcloud() +
+  theme_minimal() +
+  scale_size_area(max_size = 20) +
+  labs(title = "Positive and Negative\nSentiment Words in Charm\nLyrics by Clairo") +
+  theme(plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) +
+  scale_color_manual(values = c("positive" = "green4", "negative" = "red"))
+
+charm_wordcloud_plot
+
+```
+
+```{r}
+# Create the wordcloud for Sling album
+
+sling_song_files <- c("/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Zinnias.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Wade.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Reaper.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Partridge.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Management.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Little_Changes.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Just_for_Today.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Harbor.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Blouse.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Bambi.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Sling/Amoeba.txt")
+
+sling_text <- list()
+for (file in sling_song_files) {sling_text[[file]] <- paste(readLines(file, warn = FALSE), 
+                                                       collapse = " ")}
+
+# Create a data frame for the lyrics
+sling_df <- data.frame(
+  song = names(charm_text),
+  lyrics = unlist(charm_text),
+  stringsAsFactors = FALSE)
+
+# Put them into individual words
+sling_words <- sling_df %>%
+  unnest_tokens(word, lyrics)
+
+# Remove stop words
+data("stop_words")
+sling_words_clean <- sling_words %>%
+  anti_join(stop_words)
+
+# Make the sentiment
+bing_sentiments <- get_sentiments("bing")
+sling_sentiment <- suppressWarnings(sling_words_clean %>%
+  left_join(bing_sentiments, by = join_by("word")) %>%
+  filter(!is.na(sentiment)))
+
+# Count the number of pos/neg words
+sling_sentiment_counts <- sling_sentiment %>%
+  group_by(sentiment) %>%
+  count(word, sort = TRUE) %>%
+  ungroup()
+
+# Create the wordcloud plot
+sling_wordcloud_plot <- ggplot(sling_sentiment_counts, aes(label = word, size = n, color = sentiment)) +
+  geom_text_wordcloud() +
+  theme_minimal() +
+  scale_size_area(max_size = 20) +
+  labs(title = "Positive and Negative\nSentiment Words in Sling\nLyrics by Clairo") +
+  theme(plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) +
+  scale_color_manual(values = c("positive" = "green4", "negative" = "red"))
+
+sling_wordcloud_plot
+```
+
+
+```{r}
+# Create the wordcloud for Immunity album
+
+immunity_song_files <- c("/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Alewife.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Impossible.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Closer_to_You.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/North.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Bags.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Softly.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Sofia.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/White_Flag.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Feel_Something.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/Sinking.txt",
+  "/Users/eoinyoung/STA309Midterm2/Lyrics/Immunity/I_Wouldn't_Ask_You.txt")
+
+immunity_text <- list()
+for (file in immunity_song_files) {immunity_text[[file]] <- paste(readLines(file, warn = FALSE), 
+                                                       collapse = " ")}
+
+# Create a data frame for the lyrics
+immunity_df <- data.frame(
+  song = names(immunity_text),
+  lyrics = unlist(immunity_text),
+  stringsAsFactors = FALSE)
+
+# Put them into individual words
+immunity_words <- immunity_df %>%
+  unnest_tokens(word, lyrics)
+
+# Remove stop words
+data("stop_words")
+immunity_words_clean <- immunity_words %>%
+  anti_join(stop_words)
+
+# Make the sentiment
+bing_sentiments <- get_sentiments("bing")
+immunity_sentiment <- suppressWarnings(immunity_words_clean %>%
+  left_join(bing_sentiments, by = join_by("word")) %>%
+  filter(!is.na(sentiment)))
+
+# Count the number of pos/neg words
+immunity_sentiment_counts <- immunity_sentiment %>%
+  group_by(sentiment) %>%
+  count(word, sort = TRUE) %>%
+  ungroup()
+
+# Create the wordcloud plot
+immunity_wordcloud_plot <- ggplot(immunity_sentiment_counts, aes(label = word, size = n, color = sentiment)) +
+  geom_text_wordcloud() +
+  theme_minimal() +
+  scale_size_area(max_size = 20) +
+  labs(title = "Positive and Negative\nSentiment Words in Immunity\nLyrics by Clairo") +
+  theme(plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) +
+  scale_color_manual(values = c("positive" = "green4", "negative" = "red"))
+
+immunity_wordcloud_plot
+```
+
+## Sentiment Analysis for the three albums
+
+```{r}
+# Add album labels to each sentiment dataset
+charm_sentiment$album <- "Charm"
+immunity_sentiment$album <- "Immunity"
+sling_sentiment$album <- "Sling"
+
+# Combine all sentiment data
+all_album_sentiments <- bind_rows(charm_sentiment, immunity_sentiment, sling_sentiment)
+
+# Count positive and negative words by album
+album_sentiment_summary <- all_album_sentiments %>%
+  count(album, sentiment)
+
+# Create bar chart with custom styling and annotation
+Sentiment_chart<-ggplot(album_sentiment_summary, aes(x = album, y = n, fill = sentiment)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("positive" = "forestgreen", "negative" = "firebrick")) +
+  labs(
+    title = "Comparison of Positive vs Negative Word Counts\nin each of Clairo's Albums",
+    x = "Album",
+    y = "Word Count",
+    fill = "Sentiment"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid = element_blank()
+  )
+
+```
+
+## Song Duration Plot
+
+```{r}
+
+# Convert duration from milliseconds to minutes
+spotify_data <- spotify_data %>%
+  mutate(duration_min = duration_ms / 60000)
+
+# Create the scatterplot
+Duration_plot<-ggplot(spotify_data, aes(x = reorder(name, duration_min), y = duration_min, color = album_name)) +
+  geom_point(size = 3, alpha = 0.8) +
+  coord_flip() +
+  scale_color_manual(
+    values = c(
+      "Charm" = "limegreen",
+      "Sling" = "saddlebrown",
+      "Immunity" = "navy"
+    )
+  ) +
+  labs(
+    title = "Clairo's Song Durations by Album",
+    x = "Song",
+    y = "Duration (minutes)",
+    color = "Album"
+  ) +
+  theme_minimal() +
+  theme(
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.text.y = element_text(size = 8),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()
+) 
+```
+
+## Popularity of all songs plot
+```{r}
+spotify_data <- spotify_data %>%
+  mutate(most_popular = if_else(popularity == max(popularity), "Most Popular", "Other"))
+
+
+Popularity_plot<-ggplot(spotify_data, aes(x = reorder(name, popularity), y = popularity, fill = most_popular)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ album_name, scales = "free_y") +
+  scale_fill_manual(
+    values = c(
+      "Most Popular" = "blue"
+    )
+  ) +
+  labs(
+    title = "Popularity of Clairo's Songs by Album",
+    subtitle = "Juna from Clairo's most recent album 'Charm' is her most popular song",
+    x = "Song",
+    y = "Popularity (0–100)",
+    fill = ""
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.y = element_text(size = 8),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+```{r}
+# Arrange the wordclouds and plots in a grid
+dashboard <- grid.arrange(
+  charm_wordcloud_plot, sling_wordcloud_plot, immunity_wordcloud_plot,
+  Sentiment_chart, Duration_plot, Popularity_plot,
+  ncol = 2, nrow = 3  # Arrange 6 plots in 3 rows and 2 columns
+)
+
+# Save the dashboard as a PNG file
+ggsave("clairo_dashboard.png", plot = dashboard, width = 16, height = 12, dpi = 300)
+```
